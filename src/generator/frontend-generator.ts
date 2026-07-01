@@ -560,6 +560,9 @@ ${sFields.map((f) => `      <input
 
     const belongsToRelations = model.fields.filter((f) => f.relation?.type === 'belongsTo');
 
+    const hasInputFields = editFields.some((f) => !f.enumValues?.length && f.type !== 'Boolean' && !isFileField(f.name));
+    const hasLabel = editFields.length > 0 || belongsToRelations.length > 0;
+
     const fieldInputs = editFields.map((f) => {
       const label = `        <Label htmlFor="${f.name}">${f.name}</Label>`;
 
@@ -624,12 +627,14 @@ ${label}
       return `  const { data: ${targetMv}s } = use${f.relation!.model}s();`;
     }).join('\n');
 
+    const hasFields = editFields.length > 0 || belongsToRelations.length > 0;
+
     return `import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { ${mv}Schema } from '@/schemas/${mv}';
+${hasInputFields ? `import { Input } from '@/components/ui/input';
+` : ''}${hasLabel ? `import { Label } from '@/components/ui/label';
+` : ''}import { ${mv}Schema } from '@/schemas/${mv}';
 import { useCreate${Mn} } from '@/hooks/useCreate${Mn}';
 import { useUpdate${Mn} } from '@/hooks/useUpdate${Mn}';
 ${relImports}
@@ -646,14 +651,17 @@ export function ${Mn}Form({ initialData }: Props) {
   const update = useUpdate${Mn}();
   const isEditing = !!initialData;
 ${relHooks}
-  const {
+${hasFields ? `  const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(${mv}Schema),
     defaultValues: initialData,
-  });
+  });` : `  const { handleSubmit } = useForm<FormData>({
+    resolver: zodResolver(${mv}Schema),
+    defaultValues: initialData,
+  });`}
 
   const onSubmit = (data: FormData) => {
     if (isEditing) update.mutate({ id: initialData.id, ...data });

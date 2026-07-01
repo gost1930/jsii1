@@ -75,7 +75,10 @@ datasource db {
         if (f.isId && f.type === 'String' && f.defaultValue === 'cuid') parts.push('@default(cuid())');
         if (f.isUnique) parts.push('@unique');
         if (f.hasDefault && f.defaultValue && !f.isId) {
-          const dv = f.enumValues?.length ? f.defaultValue : f.defaultValue;
+          let dv = f.enumValues?.length ? f.defaultValue : f.defaultValue;
+          if (fieldType === 'String' && !dv.startsWith('"') && !dv.endsWith(')') && dv !== 'true' && dv !== 'false') {
+            dv = `"${dv}"`;
+          }
           parts.push(`@default(${dv})`);
         }
         lines.push(parts.join(' '));

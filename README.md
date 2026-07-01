@@ -5,23 +5,22 @@ A full-stack CRUD code generator. Define your data models, relations, and enums 
 ## Quick Start
 
 ```bash
+# Install dependencies
+npm install
+
+# Set up the database (SQLite — persists model definitions across restarts)
+npx prisma db push
+
 # Start the builder API server
 npm run dev
 
 # Open the builder UI (separate terminal)
-cd ../client && npm run dev
-```
-
-Once the server is running:
-
-```bash
-# Create a model using the API
-curl -X POST http://localhost:3000/api/generate \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Product","fields":[{"name":"id","type":"String","isId":true,"defaultValue":"uuid"},{"name":"title","type":"String","isRequired":true},{"name":"price","type":"Float","isRequired":true}]}'
+cd ../client && npm install && npm run dev
 ```
 
 Generated output lands in `./exported-project/` — both backend and client are fully scaffolded with `npm install` run automatically.
+
+> **Model persistence:** Model definitions are stored in a local SQLite database (`dev.db`). They survive server restarts and page refreshes. To reset, delete `dev.db` and run `npx prisma db push` again.
 
 ## Data Model Definition
 
@@ -289,3 +288,30 @@ JWT_SECRET=change-me-to-a-random-secret
 ```
 
 The JWT secret is used by the generated `checkAuth` middleware to verify Bearer tokens on private routes.
+
+## Persistence
+
+### Builder Server Database
+
+The builder uses a local **SQLite** database (`dev.db` in the project root) to persist model definitions across server restarts:
+
+- A `StoredModel` table stores each model definition as a JSON blob
+- Every mutation (create, update, delete model; add/remove field or relation) writes to SQLite
+- On startup, models are loaded from the database before serving requests
+- This means you can refresh the builder UI or restart the server without losing your work
+
+To reset all data:
+
+```bash
+rm -f dev.db && npx prisma db push && npx prisma generate
+```
+
+### Generated Project Database
+
+The generated backend uses **PostgreSQL** (configured via `.env`):
+
+```
+DATABASE_URL=postgresql://localhost:5432/mydb
+```
+
+The generated frontend is a static client that connects to the generated backend via the configured `VITE_API_URL`.
