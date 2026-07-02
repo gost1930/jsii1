@@ -31,6 +31,10 @@ export const BackendGenerator = {
     overwriteFile(path.join(EXPORT_DIR, 'backend', 'src', 'utils', 'validate-input.ts'), BackendGenerator.validateInput());
     overwriteFile(path.join(EXPORT_DIR, 'backend', 'src', 'middlewares', 'checkAuth.ts'), BackendGenerator.checkAuth());
     overwriteFile(path.join(EXPORT_DIR, 'backend', 'src', 'middlewares', 'checkRole.ts'), BackendGenerator.checkRole());
+    overwriteFile(path.join(EXPORT_DIR, 'backend', 'src', 'api', 'routes', 'auth', 'index.ts'), BackendGenerator.authRoutesIndex());
+    overwriteFile(path.join(EXPORT_DIR, 'backend', 'src', 'api', 'routes', 'auth', 'public', 'index.ts'), BackendGenerator.authRoutesPublic());
+    overwriteFile(path.join(EXPORT_DIR, 'backend', 'src', 'api', 'routes', 'auth', 'private', 'index.ts'), BackendGenerator.authRoutesPrivate());
+    overwriteFile(path.join(EXPORT_DIR, 'backend', 'src', 'core', 'interfaces', 'controllers', 'auth.ctrl.ts'), BackendGenerator.authController());
 
     const cwd = path.join(EXPORT_DIR, 'backend');
     try {
@@ -51,7 +55,7 @@ export const BackendGenerator = {
     const routesDir = path.join(be, 'src', 'api', 'routes');
     if (fs.existsSync(routesDir)) {
       for (const dir of fs.readdirSync(routesDir)) {
-        if (!current.has(dir)) {
+        if (!current.has(dir) && dir !== 'auth') {
           try { fs.rmSync(path.join(routesDir, dir), { recursive: true, force: true }); } catch {}
         }
       }
@@ -70,7 +74,7 @@ export const BackendGenerator = {
       if (fs.existsSync(coreDir)) {
         for (const file of fs.readdirSync(coreDir)) {
           const basename = path.basename(file, path.extname(file));
-          if (!current.has(basename)) {
+          if (!current.has(basename) && !basename.startsWith('auth')) {
             try { fs.unlinkSync(path.join(coreDir, file)); } catch {}
           }
         }
@@ -82,15 +86,28 @@ export const BackendGenerator = {
     BackendGenerator.bootstrap();
     BackendGenerator.cleanupStaleFiles(models);
 
+    const userModel = `model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+`;
+
     const schemaPath = path.join(EXPORT_DIR, 'backend', 'prisma', 'schema.prisma');
     if (fullRegenerate || !fs.existsSync(schemaPath)) {
       overwriteFile(schemaPath, PrismaSchemaBuilder.build(models));
     } else {
       let existingContent = fs.readFileSync(schemaPath, 'utf-8');
+      // Remove any existing User model block to replace with the correct one
+      existingContent = existingContent.replace(/^model User \{[\s\S]*?^\}/gm, '').replace(/\n{3,}/g, '\n\n');
       const existingNames = BackendGenerator.existingPrismaModelNames(schemaPath);
       const newModels = models.filter((m) => !existingNames.has(m.name));
 
-      if (newModels.length > 0) {
+      if (newModels.length > 0 || !existingNames.has('User')) {
         for (const newModel of newModels) {
           for (const field of newModel.fields) {
             if (field.relation?.type === 'belongsTo' && existingNames.has(field.relation.model)) {
@@ -102,7 +119,7 @@ export const BackendGenerator = {
           }
         }
         const newDefinitions = '\n' + newModels.map((m) => PrismaSchemaBuilder.buildModel(m, models)).join('\n');
-        overwriteFile(schemaPath, existingContent + newDefinitions);
+        overwriteFile(schemaPath, userModel + existingContent.trimStart() + newDefinitions);
       }
     }
 
@@ -301,11 +318,14 @@ export const checkRole = (...allowed: string[]) =>
     }).join('\n');
 
     return `import { Router } from 'express';
+import authRoutes from '@api/routes/auth';
 ${imports}
 
 const router = Router();
 
 router.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+router.use('/api/auth', authRoutes);
 
 ${uses}
 
@@ -787,6 +807,141 @@ export const validateInput = <T>(schema: Joi.ObjectSchema<T>, data: unknown): T 
     throw new ConstraintError('Missing or invalid field(s)', 400, 'VALIDATION_ERROR', messages);
   }
   return value;
+};
+`;
+  },
+
+  authRoutesIndex() {
+    return `import { Router } from 'express';
+import publicRoutes from './public';
+import privateRoutes from './private';
+
+const router = Router();
+router.use('/public', publicRoutes);
+router.use('/private', privateRoutes);
+export default router;
+`;
+  },
+
+  authRoutesPublic() {
+    return `import { Router } from 'express';
+import { AuthController } from '@core/interfaces/controllers/auth.ctrl';
+
+const router = Router();
+
+/**
+ * @openapi
+ * /auth/public/signup:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Create a new account
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email: { type: string }
+ *               password: { type: string }
+ *               name: { type: string }
+ *     responses:
+ *       201:
+ *         description: Account created
+ */
+router.post('/signup', AuthController.signup);
+
+/**
+ * @openapi
+ * /auth/public/signin:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Sign in with email and password
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email: { type: string }
+ *               password: { type: string }
+ *     responses:
+ *       200:
+ *         description: Sign in successful
+ */
+router.post('/signin', AuthController.signin);
+
+export default router;
+`;
+  },
+
+  authRoutesPrivate() {
+    return `import { Router } from 'express';
+
+const router = Router();
+
+export default router;
+`;
+  },
+
+  authController() {
+    return `import type { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { prisma } from '@config/prisma';
+import { TryCatchBlock } from '@core/app/base/try-catch-block';
+
+export const AuthController = {
+  signup: TryCatchBlock(async (req: Request, res: Response) => {
+    const { email, password, name } = req.body;
+    if (!email || !password) {
+      const err: any = new Error('Email and password are required');
+      err.status = 400;
+      throw err;
+    }
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      const err: any = new Error('Email already in use');
+      err.status = 409;
+      throw err;
+    }
+    const hashed = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({ data: { email, password: hashed, name } });
+    const token = jwt.sign(
+      { id: user.id, email: user.email, name: user.name },
+      process.env.JWT_SECRET || 'fallback-secret',
+      { expiresIn: '7d' },
+    );
+    res.status(201).json({
+      message: 'User created',
+      data: { token, user: { id: user.id, email: user.email, name: user.name } },
+    });
+  }),
+
+  signin: TryCatchBlock(async (req: Request, res: Response) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      const err: any = new Error('Email and password are required');
+      err.status = 400;
+      throw err;
+    }
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      const err: any = new Error('Invalid email or password');
+      err.status = 401;
+      throw err;
+    }
+    const token = jwt.sign(
+      { id: user.id, email: user.email, name: user.name },
+      process.env.JWT_SECRET || 'fallback-secret',
+      { expiresIn: '7d' },
+    );
+    res.json({
+      message: 'Sign in successful',
+      data: { token, user: { id: user.id, email: user.email, name: user.name } },
+    });
+  }),
 };
 `;
   },

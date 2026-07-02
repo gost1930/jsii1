@@ -17,8 +17,18 @@ datasource db {
     const enumBlocks = enums.length
       ? enums.map((e) => `enum ${e.name} {\n${e.values.map((v) => `  ${v}`).join('\n')}\n}`).join('\n\n') + '\n\n'
       : '';
+    const userModel = `model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+`;
     const bodies = models.map((m) => PrismaSchemaBuilder.buildModel(m, models));
-    return header + enumBlocks + bodies.join('\n');
+    return header + enumBlocks + userModel + bodies.join('\n');
   },
 
   collectEnums(models: ModelDefinition[]): { name: string; values: string[] }[] {

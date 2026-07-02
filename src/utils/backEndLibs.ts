@@ -9,6 +9,7 @@ export const backendLibraries = [
   'helmet@^8.1.0',
   'morgan@^1.10.0',
   'jsonwebtoken@^9.0.2',
+  'bcryptjs@^2.4.3',
   'swagger-ui-express@^5.0.1',
   'swagger-jsdoc@^6.2.8',
 ]
@@ -25,4 +26,5 @@ export const backendDevLibraries = [
   '@types/swagger-ui-express@^4.1.0',
   '@types/swagger-jsdoc@^6.0.0',
   '@types/jsonwebtoken@^9.0.9',
+  '@types/bcryptjs@^2.4.3',
 ]

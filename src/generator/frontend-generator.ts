@@ -31,6 +31,11 @@ export const FrontendGenerator = {
     overwriteFile(path.join(EXPORT_DIR, 'client', 'src', 'components', 'ui', 'table.tsx'), FrontendGenerator.uiTable());
     overwriteFile(path.join(EXPORT_DIR, 'client', 'src', 'components', 'ui', 'dialog.tsx'), FrontendGenerator.uiDialog());
     overwriteFile(path.join(EXPORT_DIR, 'client', 'src', 'components', 'layout.tsx'), FrontendGenerator.layout());
+    overwriteFile(path.join(EXPORT_DIR, 'client', 'src', 'contexts', 'auth.tsx'), FrontendGenerator.authContext());
+    overwriteFile(path.join(EXPORT_DIR, 'client', 'src', 'hooks', 'useAuth.ts'), FrontendGenerator.useAuthHook());
+    overwriteFile(path.join(EXPORT_DIR, 'client', 'src', 'pages', 'login', 'index.tsx'), FrontendGenerator.loginPage());
+    overwriteFile(path.join(EXPORT_DIR, 'client', 'src', 'pages', 'register', 'index.tsx'), FrontendGenerator.registerPage());
+    overwriteFile(path.join(EXPORT_DIR, 'client', 'src', 'utils', 'api', 'auth.ts'), FrontendGenerator.authApi());
     overwriteFile(path.join(EXPORT_DIR, 'client', 'src', 'vite-env.d.ts'), FrontendGenerator.viteEnv());
 
     const cwd = path.join(EXPORT_DIR, 'client');
@@ -58,10 +63,11 @@ export const FrontendGenerator = {
     const currentNames = new Set(models.map((m) => m.name));
     const currentPlural = new Set(models.map((m) => plural(camelCase(m.name))));
 
+    const protectedDirs = new Set(['login', 'register']);
     const pagesDir = path.join(fe, 'src', 'pages');
     if (fs.existsSync(pagesDir)) {
       for (const dir of fs.readdirSync(pagesDir)) {
-        if (!currentPlural.has(dir)) {
+        if (!currentPlural.has(dir) && !protectedDirs.has(dir)) {
           try { fs.rmSync(path.join(pagesDir, dir), { recursive: true, force: true }); } catch {}
         }
       }
@@ -76,10 +82,11 @@ export const FrontendGenerator = {
       currentHooks.add(`useDelete${m.name}.ts`);
       currentHooks.add(`useBulkDelete${m.name}.ts`);
     }
+    const protectedHooks = new Set(['useAuth.ts', 'useUtils.ts']);
     const hooksDir = path.join(fe, 'src', 'hooks');
     if (fs.existsSync(hooksDir)) {
       for (const file of fs.readdirSync(hooksDir)) {
-        if (file.endsWith('.ts') && !currentHooks.has(file) && file !== 'useUtils.ts') {
+        if (file.endsWith('.ts') && !currentHooks.has(file) && !protectedHooks.has(file)) {
           try { fs.unlinkSync(path.join(hooksDir, file)); } catch {}
         }
       }
@@ -96,11 +103,12 @@ export const FrontendGenerator = {
       }
     }
 
+    const protectedApi = new Set(['auth']);
     const apiDir = path.join(fe, 'src', 'utils', 'api');
     if (fs.existsSync(apiDir)) {
       for (const file of fs.readdirSync(apiDir)) {
         const basename = path.basename(file, path.extname(file));
-        if (!currentCamel.has(basename)) {
+        if (!currentCamel.has(basename) && !protectedApi.has(basename)) {
           try { fs.unlinkSync(path.join(apiDir, file)); } catch {}
         }
       }
@@ -264,22 +272,47 @@ import Edit${m.name}Page from '@/pages/${plural(mv)}/edit/${mv}';`;
     }).join('\n');
 
     return `import { BrowserRouter } from 'react-router-dom';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from '@/contexts/auth';
+import { useAuth } from '@/hooks/useAuth';
 import { Layout } from '@/components/layout';
+import LoginPage from '@/pages/login';
+import RegisterPage from '@/pages/register';
 ${pageImports ? `\n${pageImports}\n` : '\n'}
 const routes = [
 ${sidebarLinks}
 ];
 
+function AppContent() {
+  const { isAuth } = useAuth();
+
+  if (!isAuth) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
+  }
+
+  return (
+    <Layout links={routes}>
+      <Routes>
+        <Route path="/" element={<div className="flex items-center justify-center h-full text-muted-foreground/60"><p>Select a page from the sidebar</p></div>} />
+${pageRoutes}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Layout>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
-      <Layout links={routes}>
-        <Routes>
-          <Route path="/" element={<div className="flex items-center justify-center h-full text-muted-foreground/60"><p>Select a page from the sidebar</p></div>} />
-${pageRoutes}
-        </Routes>
-      </Layout>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </BrowserRouter>
   );
 }
@@ -291,6 +324,8 @@ export default App;
   layout() {
     return `import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { LogOut } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 interface NavLink {
   path: string;
@@ -306,6 +341,7 @@ interface LayoutProps {
 export function Layout({ children, links }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   return (
     <div className="min-h-screen flex">
@@ -344,6 +380,18 @@ export function Layout({ children, links }: LayoutProps) {
             );
           })}
         </nav>
+        <div className="border-t border-border p-2">
+          {sidebarOpen && user && (
+            <div className="px-3 py-1.5 text-xs text-muted-foreground truncate">{user.name || user.email}</div>
+          )}
+          <button
+            onClick={logout}
+            className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-all"
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            {sidebarOpen && <span>Sign out</span>}
+          </button>
+        </div>
       </aside>
       <main className="flex-1 overflow-y-auto">
         <div className="p-6">
@@ -454,6 +502,14 @@ export function cn(...inputs: ClassValue[]) {
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3005/api',
   headers: { 'Content-Type': 'application/json' },
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = \`Bearer \${token}\`;
+  }
+  return config;
 });
 
 export default api;
@@ -1320,6 +1376,242 @@ export function useBulkDelete${Mn}() {
     onError: (err: any) => toast.error(err?.response?.data?.message || err.message),
   });
 }
+`;
+  },
+
+  authContext() {
+    return `import { createContext, useState, type ReactNode } from 'react';
+
+interface AuthContextType {
+  token: string | null;
+  user: { id: string; email: string; name: string } | null;
+  isAuth: boolean;
+  setAuth: (token: string, user: { id: string; email: string; name: string }) => void;
+  logout: () => void;
+}
+
+export const AuthContext = createContext<AuthContextType | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+  const [user, setUser] = useState<{ id: string; email: string; name: string } | null>(() => {
+    try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch { return null; }
+  });
+
+  const isAuth = !!token;
+
+  const setAuth = (newToken: string, newUser: { id: string; email: string; name: string }) => {
+    setToken(newToken);
+    setUser(newUser);
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('user', JSON.stringify(newUser));
+  };
+
+  const logout = () => {
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  };
+
+  return (
+    <AuthContext.Provider value={{ token, user, isAuth, setAuth, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+`;
+  },
+
+  useAuthHook() {
+    return `import { useContext } from 'react';
+import { AuthContext } from '@/contexts/auth';
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return ctx;
+}
+`;
+  },
+
+  loginPage() {
+    return `import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { toast } from 'sonner';
+import api from '@/lib/api';
+
+export default function LoginPage() {
+  const { setAuth } = useAuth();
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/public/signin', { email, password });
+      const { token, user } = res.data.data;
+      setAuth(token, user);
+      toast.success('Signed in successfully');
+      navigate('/');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Invalid email or password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader className="text-center">
+          <CardTitle>Sign In</CardTitle>
+          <CardDescription>Enter your credentials to continue</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Email</label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Password</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? 'Signing in…' : 'Sign in'}
+            </Button>
+            <p className="text-sm text-center text-muted-foreground">
+              Don't have an account?{' '}
+              <Link to="/register" className="text-primary hover:underline">Sign up</Link>
+            </p>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+`;
+  },
+
+  registerPage() {
+    return `import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { toast } from 'sonner';
+import api from '@/lib/api';
+
+export default function RegisterPage() {
+  const { setAuth } = useAuth();
+  const navigate = useNavigate();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/public/signup', { name, email, password });
+      const { token, user } = res.data.data;
+      setAuth(token, user);
+      toast.success('Account created successfully');
+      navigate('/');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to create account');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader className="text-center">
+          <CardTitle>Create Account</CardTitle>
+          <CardDescription>Sign up to get started</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Name</label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Email</label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Password</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? 'Creating account…' : 'Sign up'}
+            </Button>
+            <p className="text-sm text-center text-muted-foreground">
+              Already have an account?{' '}
+              <Link to="/login" className="text-primary hover:underline">Sign in</Link>
+            </p>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+`;
+  },
+
+  authApi() {
+    return `import api from '@/lib/api';
+
+export const authApi = {
+  signin: (email: string, password: string) =>
+    api.post('/auth/public/signin', { email, password }),
+
+  signup: (name: string, email: string, password: string) =>
+    api.post('/auth/public/signup', { name, email, password }),
+};
 `;
   },
 };
