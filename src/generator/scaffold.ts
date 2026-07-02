@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import * as fs from "node:fs";
-import { exec, execSync } from "node:child_process";
+import { exec } from "node:child_process";
 import type { ModelDefinition } from "./types";
 import { ProjectManager } from "./project-manager";
 import { BackendGenerator } from "./backend-generator";

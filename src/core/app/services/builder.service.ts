@@ -1,7 +1,7 @@
 import { camelCase } from '@/utils/fnHelpers';
-import { addModel, getModels, removeModel as scaffoldRemove, regenerate, clearAllModels, seedDefaultModels } from '../generator/scaffold';
-import type { ModelDefinition, ModelField } from '../generator/types';
-import { AppError } from '../utils/AppError';
+import { addModel, getModels, removeModel as scaffoldRemove, regenerate, clearAllModels, seedDefaultModels } from '../../../generator/scaffold';
+import type { ModelDefinition, ModelField } from '../../../generator/types';
+import { AppError } from '../../../utils/AppError';
 
 export async function generateProject(model: ModelDefinition) {
   try {

@@ -4,8 +4,9 @@ import type { ModelDefinition } from './types';
 import { prismaTypeToTs, joiType, findDisplayName } from './types';
 import { EXPORT_DIR, overwriteFile } from './writer';
 import { PrismaSchemaBuilder } from './prisma-builder';
+import { execSync } from 'node:child_process';
+import { backendDevLibraries, backendLibraries } from '@/utils/backEndLibs';
 
-function capitalize(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function camelCase(s: string) { return s.charAt(0).toLowerCase() + s.slice(1); }
 function kebabCase(s: string) { return s.replace(/([A-Z])/g, '-$1').toLowerCase().replace(/^-/, ''); }
 function plural(s: string) { return s.endsWith('y') ? s.slice(0, -1) + 'ies' : s + 's'; }
@@ -30,6 +31,16 @@ export const BackendGenerator = {
     overwriteFile(path.join(EXPORT_DIR, 'backend', 'src', 'utils', 'validate-input.ts'), BackendGenerator.validateInput());
     overwriteFile(path.join(EXPORT_DIR, 'backend', 'src', 'middlewares', 'checkAuth.ts'), BackendGenerator.checkAuth());
     overwriteFile(path.join(EXPORT_DIR, 'backend', 'src', 'middlewares', 'checkRole.ts'), BackendGenerator.checkRole());
+
+    const cwd = path.join(EXPORT_DIR, 'backend');
+    try {
+      // const { execSync } = require('node:child_process');
+      if (backendLibraries.length) execSync(`npm install ${backendLibraries.join(' ')}`, { cwd, stdio: 'inherit', timeout: 120000 });
+      if (backendDevLibraries.length) execSync(`npm install --save-dev ${backendDevLibraries.join(' ')}`, { cwd, stdio: 'inherit', timeout: 120000 });
+      console.log('Backend dependencies installed successfully.');
+    } catch {
+      console.warn('Backend dependencies installation failed — run npm install manually.');
+    }
   },
 
   cleanupStaleFiles(models: ModelDefinition[]) {
@@ -149,18 +160,8 @@ export const BackendGenerator = {
     return JSON.stringify({
       name: 'server', version: '1.0.0', private: true,
       scripts: { dev: 'ts-node -r tsconfig-paths/register src/server.ts', build: 'tsc', start: 'node dist/server.js' },
-      dependencies: {
-        express: '^4.21.2', '@prisma/client': '^7.8.0', '@prisma/adapter-pg': '^7.8.0',
-        pg: '^8.21.0', joi: '^17.13.3', dotenv: '^17.4.2', cors: '^2.8.5', helmet: '^8.1.0',
-        morgan: '^1.10.0', jsonwebtoken: '^9.0.2',
-        'swagger-ui-express': '^5.0.1', 'swagger-jsdoc': '^6.2.8',
-      },
-      devDependencies: {
-        typescript: '^5.8.0', 'ts-node': '^10.9.2', '@types/express': '^5.0.6',
-        '@types/node': '^26.0.1', prisma: '^7.8.0', 'tsc-alias': '^1.8.0', 'tsconfig-paths': '^4.2.0',
-        '@types/morgan': '^1.9.0', '@types/swagger-ui-express': '^4.1.0',
-        '@types/swagger-jsdoc': '^6.0.0', '@types/jsonwebtoken': '^9.0.9',
-      },
+      dependencies: {},
+      devDependencies: {},
     }, null, 2);
   },
 
@@ -219,7 +220,7 @@ export default app;
 dotenv.config();
 import app from './app';
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3005;
 app.listen(PORT, () => console.log(\`Server running on http://localhost:\${PORT}\`));
 `;
   },
@@ -790,3 +791,4 @@ export const validateInput = <T>(schema: Joi.ObjectSchema<T>, data: unknown): T 
 `;
   },
 };
+

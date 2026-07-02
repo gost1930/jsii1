@@ -2,9 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import {
   generateProject, listModels, getModel, updateModel, deleteModel,
   addField, removeField, addRelation, removeRelation, initProject,
-} from '../services/builder.service';
-import { sendSuccess } from '../utils/api-response';
-import { logStream } from '../utils/log-stream';
+} from '../../app/services/builder.service';
+import { sendSuccess } from '../../../utils/api-response';
+import { logStream } from '../../../utils/log-stream';
 
 export const BuilderController = {
   health(_req: Request, res: Response) {

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { BuilderController } from '../controllers/builder.controller';
+import { BuilderController } from '../core/interfaces/controllers/builder.controller';
 import { validateModelDefinition, validateModelFields, validateField, validateRelation } from '../middlewares/validate';
 
 const router = Router();
