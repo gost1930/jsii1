@@ -1,13 +1,13 @@
-import * as path from 'node:path';
-import * as fs from 'node:fs';
-import { exec } from 'node:child_process';
-import type { ModelDefinition } from './types';
-import { ProjectManager } from './project-manager';
-import { BackendGenerator } from './backend-generator';
-import { FrontendGenerator } from './frontend-generator';
-import { EXPORT_DIR } from './writer';
-import { logStream } from '../utils/log-stream';
-import { prisma } from '../config/database';
+import * as path from "node:path";
+import * as fs from "node:fs";
+import { exec, execSync } from "node:child_process";
+import type { ModelDefinition } from "./types";
+import { ProjectManager } from "./project-manager";
+import { BackendGenerator } from "./backend-generator";
+import { FrontendGenerator } from "./frontend-generator";
+import { EXPORT_DIR } from "./writer";
+import { logStream } from "../utils/log-stream";
+import { prisma } from "../config/database";
 
 const projectManager = new ProjectManager(undefined, prisma);
 
@@ -16,20 +16,24 @@ const regenerationQueue: (() => Promise<void>)[] = [];
 
 function execAsync(command: string, cwd: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = exec(command, { cwd, timeout: 180000 }, (err, stdout, stderr) => {
-      const output = stdout?.trim() || '';
-      const errorOutput = stderr?.trim() || '';
-      if (err) {
-        reject({ err, stdout: output, stderr: errorOutput });
-      } else {
-        resolve(output);
-      }
-    });
-    child.stdout?.on('data', (data: string) => {
+    const child = exec(
+      command,
+      { cwd, timeout: 180000 },
+      (err, stdout, stderr) => {
+        const output = stdout?.trim() || "";
+        const errorOutput = stderr?.trim() || "";
+        if (err) {
+          reject({ err, stdout: output, stderr: errorOutput });
+        } else {
+          resolve(output);
+        }
+      },
+    );
+    child.stdout?.on("data", (data: string) => {
       const line = data.toString().trim();
       if (line) logStream.info(line);
     });
-    child.stderr?.on('data', (data: string) => {
+    child.stderr?.on("data", (data: string) => {
       const line = data.toString().trim();
       if (line) logStream.warn(line);
     });
@@ -72,31 +76,38 @@ export async function getModels(): Promise<ModelDefinition[]> {
 }
 
 async function runInstall(cwd: string, label: string) {
-  const nodeModulesPath = path.join(cwd, 'node_modules');
+  const nodeModulesPath = path.join(cwd, "node_modules");
   if (fs.existsSync(nodeModulesPath)) {
-    logStream.info(`Skipping ${label} npm install — node_modules already exists`);
+    logStream.info(
+      `Skipping ${label} npm install — node_modules already exists`,
+    );
     return;
   }
   logStream.info(`Installing ${label} dependencies...`);
   try {
-    await execAsync('npm install', cwd);
+    await execAsync("npm install", cwd);
+    await execAsync("npm install --save-dev tsconfig-paths", cwd);
     logStream.success(`${label} dependencies installed.`);
   } catch {
-    logStream.warn(`Warning: npm install failed for ${label}. Run it manually.`);
+    logStream.warn(
+      `Warning: npm install failed for ${label}. Run it manually.`,
+    );
   }
 }
 
 async function runPrismaGenerate() {
-  const cwd = path.join(EXPORT_DIR, 'backend');
-  const schemaPath = path.join(cwd, 'prisma', 'schema.prisma');
+  const cwd = path.join(EXPORT_DIR, "backend");
+  const schemaPath = path.join(cwd, "prisma", "schema.prisma");
   if (!fs.existsSync(schemaPath)) return;
   try {
-    logStream.info('Generating Prisma client...');
-    await execAsync('npx prisma format', cwd);
-    await execAsync('npx prisma generate', cwd);
-    logStream.success('Prisma client generated successfully.');
+    logStream.info("Generating Prisma client...");
+    await execAsync("npx prisma format", cwd);
+    await execAsync("npx prisma generate", cwd);
+    logStream.success("Prisma client generated successfully.");
   } catch {
-    logStream.warn('Prisma generation skipped — run `npx prisma generate` manually after installing deps.');
+    logStream.warn(
+      "Prisma generation skipped — run `npx prisma generate` manually after installing deps.",
+    );
   }
 }
 
@@ -107,16 +118,18 @@ function queueRegeneration() {
       const models = projectManager.getAll();
       if (models.length === 0) return;
 
-      logStream.info(`Regenerating scaffold for ${models.length} model(s): ${models.map((m) => m.name).join(', ')}`);
+      logStream.info(
+        `Regenerating scaffold for ${models.length} model(s): ${models.map((m) => m.name).join(", ")}`,
+      );
 
       BackendGenerator.generateAll(models, true);
       FrontendGenerator.generateAll(models);
 
-      const backendDir = path.join(EXPORT_DIR, 'backend');
-      const clientDir = path.join(EXPORT_DIR, 'client');
+      const backendDir = path.join(EXPORT_DIR, "backend");
+      const clientDir = path.join(EXPORT_DIR, "client");
 
-      await runInstall(backendDir, 'backend');
-      await runInstall(clientDir, 'client');
+      await runInstall(backendDir, "backend");
+      await runInstall(clientDir, "client");
 
       await runPrismaGenerate();
 
@@ -152,25 +165,72 @@ export async function clearAllModels() {
 
 const defaultSeedModels: ModelDefinition[] = [
   {
-    name: 'User',
+    name: "User",
     fields: [
-      { name: 'id', type: 'Int', isId: true, isRequired: true, defaultValue: 'autoincrement' },
-      { name: 'email', type: 'String', isRequired: true, isUnique: true },
-      { name: 'name', type: 'String', isOptional: true },
-      { name: 'role', type: 'String', isRequired: true, hasDefault: true, defaultValue: '"USER"' },
-      { name: 'active', type: 'Boolean', isRequired: true, hasDefault: true, defaultValue: 'true' },
-      { name: 'createdAt', type: 'DateTime', isRequired: true, hasDefault: true, defaultValue: 'now()' },
-      { name: 'updatedAt', type: 'DateTime', isRequired: true, hasDefault: true, defaultValue: 'now()' },
+      {
+        name: "id",
+        type: "Int",
+        isId: true,
+        isRequired: true,
+        defaultValue: "autoincrement",
+      },
+      { name: "email", type: "String", isRequired: true, isUnique: true },
+      { name: "name", type: "String", isOptional: true },
+      {
+        name: "role",
+        type: "String",
+        isRequired: true,
+        hasDefault: true,
+        defaultValue: '"USER"',
+      },
+      {
+        name: "active",
+        type: "Boolean",
+        isRequired: true,
+        hasDefault: true,
+        defaultValue: "true",
+      },
+      {
+        name: "createdAt",
+        type: "DateTime",
+        isRequired: true,
+        hasDefault: true,
+        defaultValue: "now()",
+      },
+      {
+        name: "updatedAt",
+        type: "DateTime",
+        isRequired: true,
+        hasDefault: true,
+        defaultValue: "now()",
+      },
     ],
   },
   {
-    name: 'Post',
+    name: "Post",
     fields: [
-      { name: 'id', type: 'Int', isId: true, isRequired: true, defaultValue: 'autoincrement' },
-      { name: 'title', type: 'String', isRequired: true },
-      { name: 'body', type: 'String', isOptional: true },
-      { name: 'createdAt', type: 'DateTime', isRequired: true, hasDefault: true, defaultValue: 'now()' },
-      { name: 'author', type: 'String', isRequired: false, relation: { type: 'belongsTo', model: 'User' } },
+      {
+        name: "id",
+        type: "Int",
+        isId: true,
+        isRequired: true,
+        defaultValue: "autoincrement",
+      },
+      { name: "title", type: "String", isRequired: true },
+      { name: "body", type: "String", isOptional: true },
+      {
+        name: "createdAt",
+        type: "DateTime",
+        isRequired: true,
+        hasDefault: true,
+        defaultValue: "now()",
+      },
+      {
+        name: "author",
+        type: "String",
+        isRequired: false,
+        relation: { type: "belongsTo", model: "User" },
+      },
     ],
   },
 ];

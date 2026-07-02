@@ -148,7 +148,7 @@ export const BackendGenerator = {
   packageJson() {
     return JSON.stringify({
       name: 'server', version: '1.0.0', private: true,
-      scripts: { dev: 'ts-node src/server.ts', build: 'tsc', start: 'node dist/server.js' },
+      scripts: { dev: 'ts-node -r tsconfig-paths/register src/server.ts', build: 'tsc', start: 'node dist/server.js' },
       dependencies: {
         express: '^4.21.2', '@prisma/client': '^7.8.0', '@prisma/adapter-pg': '^7.8.0',
         pg: '^8.21.0', joi: '^17.13.3', dotenv: '^17.4.2', cors: '^2.8.5', helmet: '^8.1.0',
@@ -157,7 +157,7 @@ export const BackendGenerator = {
       },
       devDependencies: {
         typescript: '^5.8.0', 'ts-node': '^10.9.2', '@types/express': '^5.0.6',
-        '@types/node': '^26.0.1', prisma: '^7.8.0', 'tsc-alias': '^1.8.0',
+        '@types/node': '^26.0.1', prisma: '^7.8.0', 'tsc-alias': '^1.8.0', 'tsconfig-paths': '^4.2.0',
         '@types/morgan': '^1.9.0', '@types/swagger-ui-express': '^4.1.0',
         '@types/swagger-jsdoc': '^6.0.0', '@types/jsonwebtoken': '^9.0.9',
       },
